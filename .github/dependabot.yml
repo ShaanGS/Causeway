@@ -1,10 +1,14 @@
+# Security updates only. Version bumps are applied by hand so that a bot never
+# appears as a contributor; open-pull-requests-limit 0 disables version PRs.
 version: 2
 updates:
   - package-ecosystem: pip
     directory: /
     schedule:
       interval: monthly
+    open-pull-requests-limit: 0
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    open-pull-requests-limit: 0
