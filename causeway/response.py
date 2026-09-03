@@ -40,9 +40,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from ventriloquist.gateway import Gateway
 from ventriloquist.policy import Decision, PolicyEngine
-from ventriloquist.provenance import OriginKind, TrustLevel
-from .entities import evidence_label
+from ventriloquist.provenance import OriginKind, ProvenanceRecord, TrustLevel
+
+from .entities import EntityResolver, evidence_label
 from .incident import Incident
 from .rootcause import RootCandidate
 
@@ -139,7 +141,8 @@ def load_policy() -> PolicyEngine:
     return PolicyEngine(POLICY_PATH)
 
 
-def target_provenance(incident: Incident, root: RootCandidate, resolver, gateway):
+def target_provenance(incident: Incident, root: RootCandidate, resolver: EntityResolver,
+                      gateway: Gateway) -> ProvenanceRecord:
     """Lineage of the entity we are about to act on: every attestation of it in this case.
 
     `min()` over these is the weakest sensor that ever reported *this entity*, which is the
@@ -159,9 +162,12 @@ def target_provenance(incident: Incident, root: RootCandidate, resolver, gateway
 
 
 def recommend(incident: Incident, root: RootCandidate | None, policy: PolicyEngine,
-              *, provenance=None) -> Recommendation:
-    """Pick the lowest effective rung the evidence authorises."""
-    prov = provenance if provenance is not None else _provenance_of(incident)
+              prov: ProvenanceRecord) -> Recommendation:
+    """Pick the lowest effective rung the evidence authorises.
+
+    ``prov`` is the lineage the decision is evaluated against: the target entity's, from
+    `target_provenance`, or the incident's own when there is no rankable target.
+    """
     effective = set(EFFECTIVE.get(root.entity.kind, ())) if root else set()
 
     options: list[Option] = []
@@ -225,13 +231,3 @@ def recommend(incident: Incident, root: RootCandidate | None, policy: PolicyEngi
         needs_human=tuple(o.action_id for o in withheld),
     )
 
-
-def _provenance_of(incident: Incident):
-    raise ValueError(
-        f"Incident {incident.id} has no provenance; call incident.register(...) with a "
-        f"gateway first so its lineage exists to be evaluated."
-    )
-
-
-def _sensor_of(incident: Incident) -> str:
-    return ", ".join(incident.sensors)

@@ -32,6 +32,8 @@ from dataclasses import dataclass
 from ventriloquist.gateway import Gateway
 from ventriloquist.provenance import Origin, OriginKind
 from ventriloquist.revocation import RevocationReport
+
+from .entities import EntityResolver
 from .incident import Incident
 from .schema import iso
 
@@ -84,7 +86,7 @@ class RootCandidate:
         }
 
 
-def rank(incident: Incident, resolver, *, top: int = 3) -> list[RootCandidate]:
+def rank(incident: Incident, resolver: EntityResolver, *, top: int = 3) -> list[RootCandidate]:
     """Rank the incident's entities by how much containing them would have mattered."""
     obs = sorted(incident.observations, key=lambda o: (o.first_ts, o.id))
     if not obs:
@@ -106,8 +108,8 @@ def rank(incident: Incident, resolver, *, top: int = 3) -> list[RootCandidate]:
                 row["count"] += 1
 
     out: list[RootCandidate] = []
-    for ref, row in seen.items():
-        origin: Origin = row["origin"]
+    for row in seen.values():
+        origin = row["origin"]
         control = CONTROLLABILITY.get(origin.kind, 0.0)
         if control <= 0.0:
             continue  # not a thing anyone can contain

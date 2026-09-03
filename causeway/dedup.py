@@ -38,8 +38,10 @@ from .schema import Alert
 #:
 #: 30 s is the default because it costs nothing on the lab corpus (identical incidents,
 #: recall and root cause at every value from 30 s to 300 s) while leaving an order of
-#: magnitude of headroom. Any deployment should set it from its own shortest stage rather
-#: than inherit this number.
+#: magnitude of headroom. It is still too long for AIT: at 30 s it merges across three
+#: adjacent scanner stages 23-39 s long and erases evidence 10,819 times, all of them
+#: there, so the public-corpus results are reported at ``--window 5``. Any deployment
+#: should set it from its own shortest stage rather than inherit this number.
 REPEAT_WINDOW = 30  # seconds
 
 

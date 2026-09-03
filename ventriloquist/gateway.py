@@ -23,12 +23,11 @@ from pathlib import Path
 
 from .audit import AuditLog
 from .policy import Decision, PolicyEngine, Verdict
-from .provenance import Origin, OriginKind, ProvenanceRecord, TrustLevel
+from .provenance import Origin, OriginKind, TrustLevel
 from .quarantine import QuarantineEntry, QuarantineQueue
 from .revocation import RevocationReport, blast_radius
 from .store import InMemoryStore, MemoryItem, MemoryStore
 from .taint import TurnContext
-
 
 #: `mem_12` and the `mem_12@attested` a quarantine release writes both count as 12.
 _SERIAL = re.compile(r"^(?:mem|turn)_(\d+)")

@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, field, replace
+from collections.abc import Iterable
+from dataclasses import dataclass
 from enum import IntEnum
-from typing import Iterable
 
 
 class TrustLevel(IntEnum):
@@ -117,7 +117,7 @@ class Origin:
 
     @classmethod
     def of(cls, kind: OriginKind, locator: str, *, trust: TrustLevel | None = None,
-           label: str = "") -> "Origin":
+           label: str = "") -> Origin:
         return cls(kind, locator, trust if trust is not None else DEFAULT_TRUST[kind], label)
 
     @property
@@ -168,7 +168,7 @@ class ProvenanceRecord:
 
     @classmethod
     def root(cls, origin: Origin, *, content: str, session_id: str = "",
-             turn_id: str = "", day: int = 0) -> "ProvenanceRecord":
+             turn_id: str = "", day: int = 0) -> ProvenanceRecord:
         """Provenance for content entering the system directly from one origin."""
         return cls(
             origins=frozenset({origin}),

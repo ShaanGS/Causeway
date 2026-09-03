@@ -1,7 +1,6 @@
 {
   "corpus": {
-    "name": "causeway-lab",
-    "seed": 7,
+    "name": "lab",
     "alerts": 938,
     "attack_alerts": 114,
     "stages": [
@@ -17,6 +16,7 @@
     ]
   },
   "ground_truth_root": "account:j.okafor",
+  "repeat_window_seconds": 30,
   "minutes_per_pivot_assumption": 3.0,
   "configurations": [
     {
@@ -30,12 +30,13 @@
       "suppressed": 0,
       "evidence_erased": 0,
       "false_suppression_rate": 0.0,
+      "root_cause_gradable": true,
       "root_cause_top1": false,
       "root_cause_top3": false,
       "stages_recovered": "0/9",
       "mttc_seconds": null,
       "analyst_minutes_saved_modelled": 0.0,
-      "elapsed_ms": 7.03,
+      "elapsed_ms": 7.04,
       "model_calls": 0,
       "network_calls": 0,
       "notes": [
@@ -53,12 +54,13 @@
       "suppressed": 456,
       "evidence_erased": 4,
       "false_suppression_rate": 0.0088,
+      "root_cause_gradable": true,
       "root_cause_top1": false,
       "root_cause_top3": false,
       "stages_recovered": "4/9",
       "mttc_seconds": 85434,
       "analyst_minutes_saved_modelled": 2802.0,
-      "elapsed_ms": 15.28,
+      "elapsed_ms": 16.0,
       "model_calls": 0,
       "network_calls": 0,
       "notes": [
@@ -76,12 +78,13 @@
       "suppressed": 84,
       "evidence_erased": 0,
       "false_suppression_rate": 0.0,
+      "root_cause_gradable": true,
       "root_cause_top1": false,
       "root_cause_top3": false,
       "stages_recovered": "9/9",
       "mttc_seconds": 86095,
       "analyst_minutes_saved_modelled": 2808.0,
-      "elapsed_ms": 31.96,
+      "elapsed_ms": 32.25,
       "model_calls": 0,
       "network_calls": 0,
       "notes": [
@@ -99,12 +102,13 @@
       "suppressed": 84,
       "evidence_erased": 0,
       "false_suppression_rate": 0.0,
+      "root_cause_gradable": true,
       "root_cause_top1": true,
       "root_cause_top3": true,
       "stages_recovered": "9/9",
       "mttc_seconds": 7065,
       "analyst_minutes_saved_modelled": 2763.0,
-      "elapsed_ms": 23.72,
+      "elapsed_ms": 25.15,
       "model_calls": 0,
       "network_calls": 0,
       "notes": []

@@ -1,7 +1,13 @@
-"""HTTP surface over the pipeline. The console is a projection; nothing decides here."""
+"""HTTP surface over the pipeline. The console is a projection; nothing decides here.
+
+The corpus is chosen by environment: ``CAUSEWAY_CORPUS`` is ``lab`` (default), ``ait``, or
+a path to a JSONL file, and ``CAUSEWAY_SCENARIO`` names the AIT scenario. ``causeway serve``
+sets both from its arguments.
+"""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -10,12 +16,26 @@ from fastapi.staticfiles import StaticFiles
 
 from causeway import metrics as M
 from causeway import rootcause as RC
+from causeway.corpus import load
 from causeway.pipeline import Pipeline
 
 STATIC = Path(__file__).parent / "static"
 
+
+def _build() -> Pipeline:
+    scn = load(os.environ.get("CAUSEWAY_CORPUS", "lab"),
+               scenario=os.environ.get("CAUSEWAY_SCENARIO"))
+    return Pipeline.from_scenario(scn).run()
+
+
 app = FastAPI(title="Causeway")
-PIPELINE = Pipeline.from_lab().run()
+PIPELINE = _build()
+
+
+@app.get("/api/health")
+def health() -> dict:
+    intact, _ = PIPELINE.gateway.audit.verify()
+    return {"ok": True, "corpus": PIPELINE.summary()["corpus"], "audit_intact": intact}
 
 
 @app.get("/api/state")
@@ -42,7 +62,7 @@ def containment(incident_id: str) -> dict:
 
 @app.get("/api/metrics")
 def measured() -> dict:
-    return M.run_all()
+    return M.run_all(PIPELINE.scenario)
 
 
 @app.get("/api/audit")
@@ -56,7 +76,7 @@ def audit() -> dict:
 @app.post("/api/reset")
 def reset() -> dict:
     global PIPELINE
-    PIPELINE = Pipeline.from_lab().run()
+    PIPELINE = _build()
     return PIPELINE.summary()
 
 

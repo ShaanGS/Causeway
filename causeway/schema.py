@@ -12,9 +12,10 @@ Nothing here decides anything. `entities.py` resolves the slots to real entities
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Mapping
+from datetime import UTC, datetime
+from typing import Any
 
 #: Canonical entity slots. A sensor that has no opinion about a slot simply omits it --
 #: an absent slot is not an empty one, and correlation never joins on a missing value.
@@ -33,7 +34,7 @@ SLOTS: tuple[str, ...] = (
 
 def iso(ts: int) -> str:
     """Epoch seconds to a readable UTC stamp. The console renders this, never the integer."""
-    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +102,7 @@ class Alert:
 def load_alerts(path: str) -> list[Alert]:
     """Read a JSONL alert file. One object per line, the shape `Alert.to_dict` emits."""
     alerts: list[Alert] = []
-    with open(path, "r", encoding="utf-8") as handle:
+    with open(path, encoding="utf-8") as handle:
         for line in handle:
             line = line.strip()
             if not line:

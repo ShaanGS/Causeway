@@ -19,11 +19,21 @@ an analyst can follow.
 
 **Ubiquitous entities carry no signal.** The domain controller appears in everything; so
 does the vulnerability scanner's source address. Joining on those merges the whole estate
-into one incident. Each entity is weighted by how rare it is across the corpus -- the
-standard inverse-document-frequency idea -- so a hub contributes almost nothing and a host
-that appears in nine observations contributes a lot. This is why the benign Sunday does not
-collapse into a single false incident, and it is the cheapest defence against the failure
-mode that makes analysts abandon correlation tooling.
+into one incident. So each entity is weighted by how *un*-ubiquitous it is, and ubiquity is
+tested two ways, because either test alone is wrong on real data:
+
+- *frequency* -- how many observations mention it (inverse document frequency). Catches
+  the domain controller. But it also punishes a loud attacker: on the AIT public corpus one
+  intruder's scanner produced a quarter of the whole stream, and by frequency alone its
+  address looked like infrastructure and every edge that mattered was discounted away.
+- *degree* -- how many distinct other entities it is seen with. Catches the scanner that
+  touches every host and the file server everyone talks to. A loud attacker who only ever
+  touches two machines scores as distinctive, however many alerts they generate.
+
+An entity is discounted only when **both** tests call it a hub; the weight is the larger of
+the two rarity scores. Loud is not the same as everywhere. This is why the benign Sunday
+does not collapse into a single false incident, and it is the cheapest defence against the
+failure mode that makes analysts abandon correlation tooling.
 
 Process ancestry is exempt from all weighting: a parent pid *is* causation, not evidence of
 it. No model runs here and nothing leaves the process.
@@ -35,6 +45,7 @@ import math
 from dataclasses import dataclass
 
 from ventriloquist.provenance import OriginKind
+
 from .dedup import Observation
 from .entities import EntityResolver
 
@@ -85,16 +96,34 @@ class Edge:
                 "confidence": round(self.confidence, 3), "reason": self.reason}
 
 
+def _rarity(count: int, total: int) -> float:
+    """Inverse-frequency rarity in [0, 1]: 1 for a thing seen once, ~0 for one seen everywhere."""
+    return min(1.0, math.log(total / max(1, count)) / math.log(total + 1))
+
+
 def entity_weights(observations: list[Observation], resolver: EntityResolver
                    ) -> dict[str, float]:
-    """Rarity weight per entity ref, in [0, 1]. Ubiquitous entities score near zero."""
-    total = max(1, len(observations))
-    df: dict[str, int] = {}
+    """Distinctiveness per entity ref, in [0, 1]. Hubs score near zero.
+
+    Two rarity scores are taken and the larger kept: rarity by observation count, and
+    rarity by the number of distinct entities this one co-occurs with. An entity has to be
+    both everywhere in the stream *and* connected to everything before it is discounted
+    -- see the module docstring for the corpus that made the distinction necessary.
+    """
+    mentions: dict[str, int] = {}
+    neighbours: dict[str, set[str]] = {}
     for obs in observations:
-        for ref in {o.ref for o in resolver.entity_origins(obs.representative)}:
-            df[ref] = df.get(ref, 0) + 1
-    scale = math.log(total + 1)
-    return {ref: min(1.0, math.log(total / count) / scale) for ref, count in df.items()}
+        refs = {o.ref for o in resolver.entity_origins(obs.representative)}
+        for ref in refs:
+            mentions[ref] = mentions.get(ref, 0) + 1
+            neighbours.setdefault(ref, set()).update(refs - {ref})
+
+    total_obs = max(1, len(observations))
+    total_refs = max(1, len(mentions))
+    return {
+        ref: max(_rarity(count, total_obs), _rarity(len(neighbours[ref]), total_refs))
+        for ref, count in mentions.items()
+    }
 
 
 def _all_refs(observations: list[Observation], resolver: EntityResolver) -> set[str]:
@@ -142,7 +171,8 @@ def correlate(observations: list[Observation], resolver: EntityResolver, *,
     for obs in ordered:
         rep = obs.representative
         refs = _refs(obs, resolver)
-        host = resolver.host(rep.entity("host")) if rep.entity("host") else None
+        raw_host = rep.entity("host")
+        host = resolver.host(raw_host) if raw_host else None
 
         # C-01 process ancestry. A parent pid is causation itself, so it is neither
         # rarity-weighted nor thresholded down.

@@ -28,6 +28,7 @@ import re
 from dataclasses import dataclass, field
 
 from ventriloquist.provenance import Origin, OriginKind, TrustLevel
+
 from .schema import Alert
 
 #: Evidentiary weight per product. A first-party agent on a managed endpoint reports facts

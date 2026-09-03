@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 
 from ventriloquist.gateway import Gateway
 from ventriloquist.provenance import Origin, OriginKind, TrustLevel
+
 from .correlate import Edge
 from .dedup import Observation
 from .entities import EntityResolver, evidence_label
@@ -163,7 +164,7 @@ def build(observations: list[Observation], edges: list[Edge], resolver: EntityRe
 
     incidents: list[Incident] = []
     n = 0
-    for root, members in groups.items():
+    for members in groups.values():
         if len(members) == 1 and by_id[members[0]].severity < LONE_SEVERITY:
             continue  # a lone quiet observation is not a case
         member_set = set(members)

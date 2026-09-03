@@ -9,3 +9,9 @@ deck/slide-*.jpg
 deck/*.pdf
 deck/unpacked/
 deck/recursion-thumbs*.jpg
+.claude/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/

@@ -28,8 +28,8 @@ Deterministic: same seed, same corpus, byte for byte.
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
 
+from ..corpus import Scenario
 from ..schema import Alert
 
 #: Ordered attack stages. The index is the ground-truth ordering used by root-cause scoring
@@ -51,6 +51,11 @@ STAGES: tuple[str, ...] = (
 #: revoke. Nothing in the pipeline is told this; `metrics.py` only grades against it.
 GROUND_TRUTH_ROOT = "initial_access"
 
+#: The entity a correct root-cause answer must name: the account whose successful login
+#: is the first thing the organisation could have revoked. `EntityResolver` canonicalises
+#: `CORP\\j.okafor` to this.
+GROUND_TRUTH_ROOT_REF = "account:j.okafor"
+
 ATTACKER_IP = "203.0.113.47"
 EXFIL_IP = "198.51.100.22"
 VICTIM_USER = "CORP\\j.okafor"
@@ -62,27 +67,6 @@ BENIGN_USERS = ["CORP\\a.mensah", "CORP\\l.tanaka", "CORP\\r.silva",
 BENIGN_HOSTS = ["WIN-WS-012", "WIN-WS-027", "WIN-WS-033", "WIN-FS-001", "WIN-DC-001"]
 
 T0 = 1764547200  # 2025-12-01 00:00:00 UTC -- the quiet part of a Sunday night
-
-
-@dataclass(frozen=True, slots=True)
-class Scenario:
-    """A generated corpus plus the answer key that grades any analysis of it."""
-
-    alerts: list[Alert]
-    #: alert id -> stage, for every alert genuinely part of the attack
-    truth: dict[str, str]
-    #: alert id -> the alert id that actually caused it, where one exists
-    parents: dict[str, str]
-    #: ids of alerts that are true duplicates of an earlier alert (safe to suppress)
-    duplicates: set[str]
-    root_alert_id: str
-
-    @property
-    def attack_ids(self) -> set[str]:
-        return set(self.truth)
-
-    def by_id(self) -> dict[str, Alert]:
-        return {a.id: a for a in self.alerts}
 
 
 class _Emitter:
@@ -164,7 +148,8 @@ def _background(em: _Emitter, hours: int = 24) -> None:
     for _ in range(90):
         em.emit(T0 + rng.randint(6 * 3600, 7 * 3600), "suricata", "2010935",
                 "Port scan detected", 25,
-                {"src_ip": "10.20.0.5", "dst_ip": f"10.20.{rng.randint(1, 8)}.{rng.randint(2, 250)}"})
+                {"src_ip": "10.20.0.5",
+                 "dst_ip": f"10.20.{rng.randint(1, 8)}.{rng.randint(2, 250)}"})
 
     # Assorted low-grade noise from all three products.
     noise = [
@@ -187,7 +172,6 @@ def _background(em: _Emitter, hours: int = 24) -> None:
 
 def _attack(em: _Emitter) -> str:
     """The nine stages. Returns the id of the alert that is the true root cause."""
-    rng = em.rng
     t = T0 + 22 * 3600  # 22:00 -- starts while the queue is already deep
 
     # 1. Recon. Same rule as the vulnerability scanner, different source address.
@@ -197,13 +181,14 @@ def _attack(em: _Emitter) -> str:
 
     # 2. Password spray -- many users, one source. Same rule as a mistyped password.
     t += 1800
-    spray_first = None
+    spray: list[Alert] = []
     for i, user in enumerate(BENIGN_USERS + [VICTIM_USER]):
         a = em.emit(t + i * 7, "wazuh", "5710", "Authentication failure", 30,
                     {"user": user, "host": "VPN-GW-01", "src_ip": ATTACKER_IP},
                     stage="password_spray", parent=recon.id)
-        spray_first = spray_first or a
+        spray.append(a)
         em.repeat(a, 5, spread=40)
+    spray_first = spray[0]
 
     # 3. Initial access -- the spray lands. This is the root cause: the first moment the
     #    attacker holds something we could take away.
@@ -283,12 +268,13 @@ def generate(seed: int = 7) -> Scenario:
     """Build the corpus. Deterministic in `seed`."""
     em = _Emitter(random.Random(seed))
     _background(em)
-    root = _attack(em)
+    _attack(em)
     em.alerts.sort(key=lambda a: (a.ts, a.id))
     return Scenario(
+        name="lab",
         alerts=em.alerts,
         truth=em.truth,
+        root_ref=GROUND_TRUTH_ROOT_REF,
         parents=em.parents,
         duplicates=em.duplicates,
-        root_alert_id=root,
     )

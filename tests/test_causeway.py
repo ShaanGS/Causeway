@@ -8,14 +8,15 @@ mechanism were quietly doing nothing.
 from __future__ import annotations
 
 import inspect
-from pathlib import Path
 
 import pytest
 
 from causeway import correlate as C
-from causeway import dedup, incident as I, metrics, response as R, rootcause as RC
-from causeway.adapters.lab import (GROUND_TRUTH_ROOT, SECOND_HOST, VICTIM_HOST,
-                                   VICTIM_USER, generate)
+from causeway import dedup, metrics
+from causeway import incident as I
+from causeway import response as R
+from causeway import rootcause as RC
+from causeway.adapters.lab import GROUND_TRUTH_ROOT, SECOND_HOST, VICTIM_HOST, VICTIM_USER, generate
 from causeway.entities import EntityResolver
 from causeway.schema import Alert
 from ventriloquist.gateway import Gateway
@@ -136,6 +137,23 @@ def test_ubiquitous_entities_carry_little_weight(pipeline):
     assert weights["address:10.20.0.5"] < weights["address:203.0.113.47"]
 
 
+def test_loud_is_not_the_same_as_ubiquitous(resolver):
+    """An attacker who fires 200 alerts at one host must not be discounted like the domain
+    controller, which fires 200 alerts *with 200 different people*."""
+    alerts = []
+    for i in range(200):
+        alerts.append(Alert(id=f"loud-{i}", ts=i, sensor="suricata", rule_id=str(i),
+                            rule_name="scan", severity=20,
+                            entities={"src_ip": "203.0.113.47", "dst_ip": "10.0.0.9"}))
+        alerts.append(Alert(id=f"hub-{i}", ts=i, sensor="wazuh", rule_id=str(i),
+                            rule_name="logon", severity=20,
+                            entities={"host": "WIN-DC-001", "user": f"CORP\\user{i}"}))
+    obs, _ = dedup.group(alerts, resolver)
+    weights = C.entity_weights(obs, resolver)
+    assert weights["host:win-dc-001"] < 0.15
+    assert weights["address:203.0.113.47"] > 0.8
+
+
 def test_every_edge_explains_itself(pipeline):
     for e in pipeline["edges"]:
         assert len(e.reason) > 20 and not e.reason.endswith(" ")
@@ -196,7 +214,7 @@ def test_the_biggest_incident_gets_a_containing_action(pipeline):
     big = max(pipeline["incidents"], key=lambda x: x.alert_count)
     root = RC.rank(big, pipeline["resolver"])[0]
     prov = R.target_provenance(big, root, pipeline["resolver"], pipeline["gateway"])
-    rec = R.recommend(big, root, pipeline["gateway"].policy, provenance=prov)
+    rec = R.recommend(big, root, pipeline["gateway"].policy, prov)
     assert rec.recommended in R.CONTAINING
 
 
@@ -204,7 +222,7 @@ def test_the_most_destructive_rungs_still_need_a_human(pipeline):
     big = max(pipeline["incidents"], key=lambda x: x.alert_count)
     root = RC.rank(big, pipeline["resolver"])[0]
     prov = R.target_provenance(big, root, pipeline["resolver"], pipeline["gateway"])
-    rec = R.recommend(big, root, pipeline["gateway"].policy, provenance=prov)
+    rec = R.recommend(big, root, pipeline["gateway"].policy, prov)
     assert rec.recommended != "account.disable"
     assert "account.disable" in rec.needs_human
     assert rec.blocked_reason
