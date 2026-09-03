@@ -27,8 +27,20 @@ from .entities import EntityResolver
 from .schema import Alert
 
 #: Two firings of the same rule about the same entities, this far apart or less, are the
-#: same observation. Wider than a sensor's own throttle, narrower than an attack stage.
-REPEAT_WINDOW = 300  # seconds
+#: same observation.
+#:
+#: **This value must be shorter than the shortest thing you need to tell apart**, and that
+#: is a property of the data, not a preference. It was 300 s until the AIT corpus was tried,
+#: where attack stages run as short as 2 s (`service_stop`) and 23 s (`dirb`) -- a 300 s
+#: window is longer than several entire stages there, so merging across them was not a bug
+#: in the rule but an arithmetic certainty. On that corpus 300 s erased evidence 11,213
+#: times; 5 s erased it zero times.
+#:
+#: 30 s is the default because it costs nothing on the lab corpus (identical incidents,
+#: recall and root cause at every value from 30 s to 300 s) while leaving an order of
+#: magnitude of headroom. Any deployment should set it from its own shortest stage rather
+#: than inherit this number.
+REPEAT_WINDOW = 30  # seconds
 
 
 def _key(alert: Alert, resolver: EntityResolver) -> tuple:
@@ -158,8 +170,15 @@ def group(alerts: list[Alert], resolver: EntityResolver, *,
     return out, ledger
 
 
+#: The window the strawman uses. Deliberately *not* `REPEAT_WINDOW`: the baseline exists to
+#: represent what queue tooling does out of the box, and it must not silently inherit
+#: whatever Causeway happens to be tuned to. Letting it track our constant made the baseline
+#: look better every time we tightened ours, which measures nothing.
+NAIVE_WINDOW = 300  # seconds
+
+
 def naive_text_group(alerts: list[Alert], *,
-                     window: int = REPEAT_WINDOW) -> tuple[list[Observation], Ledger]:
+                     window: int = NAIVE_WINDOW) -> tuple[list[Observation], Ledger]:
     """The strawman: merge on what the alert *says*.
 
     This is not a hypothetical bad idea -- it is what queue tooling does by default, and it
