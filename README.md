@@ -1,22 +1,81 @@
-# Causeway
+<h1 align="center">Causeway</h1>
 
-[![ci](https://github.com/ShaanGS/Causeway/actions/workflows/ci.yml/badge.svg)](https://github.com/ShaanGS/Causeway/actions/workflows/ci.yml)
+<p align="center"><strong>Causal SOC alert correlation and root-cause intelligence.</strong><br/>
+From 938 alerts to 17 cases, the right root cause, and the smallest action that would have stopped the intrusion — with the evidence for every step, and a written refusal for every step it will not take.</p>
 
-**Causal SOC alert correlation and root-cause intelligence.**
+<p align="center">
+<a href="https://github.com/ShaanGS/Causeway/actions/workflows/ci.yml"><img alt="ci" src="https://github.com/ShaanGS/Causeway/actions/workflows/ci.yml/badge.svg"></a>
+<img alt="python" src="https://img.shields.io/badge/python-3.11%20%7C%203.12-3776ab">
+<img alt="tests" src="https://img.shields.io/badge/tests-51%20passing-3fb950">
+<img alt="lint" src="https://img.shields.io/badge/ruff%20%2B%20mypy-clean-3fb950">
+<img alt="decision path" src="https://img.shields.io/badge/model%20calls-0-8b949e">
+<a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-blue"></a>
+</p>
+
+<p align="center">
+<a href="#try-it-in-two-minutes">Try it</a> ·
+<a href="#the-result">Results</a> ·
+<a href="#how-it-works">How it works</a> ·
+<a href="#every-claim-and-where-to-check-it">Evidence</a> ·
+<a href="docs/ARCHITECTURE.md">Architecture</a> ·
+<a href="docs/API.md">CLI &amp; API</a> ·
+<a href="docs/adr/">Decisions</a> ·
+<a href="#limits">Limits</a>
+</p>
+
+Built for **PS2 — Causal SOC Alert Correlation & Root-Cause Intelligence**
+(Microsoft Innovation Club, VIT Chennai).
+
+![The analyst console: 938 alerts in, 17 cases out, the causal reconstruction of the headline incident, and the root cause it names](docs/img/console.png)
+
+## The problem
 
 A single attacker action produces dozens of technically correct alerts across products that
 do not agree on what to call a person, a machine, or an address. The queue shows them as
-unrelated rows. Causeway reconstructs the causal incident behind them, names the earliest
-thing an organisation could actually have contained, suppresses only provable duplicates,
-and recommends the smallest action that would stop the intrusion — refusing, in writing, to
-go further than its evidence supports.
+unrelated rows. Naive deduplication merges alerts that *read* the same and erases the
+attack's own stages. Automated response either does nothing or isolates a production server
+at 3 a.m. because a reputation feed had an opinion.
 
-Built for **PS2 — Causal SOC Alert Correlation & Root-Cause Intelligence**
-(Microsoft Innovation Club, VIT Chennai). No model and no network call anywhere in the
-decision path; the whole pipeline runs in about 25 ms on the lab corpus and under a second
-on 45,000 real alerts.
+Causeway reconstructs the causal incident behind the rows, names the earliest thing an
+organisation could actually have contained, suppresses only provable duplicates, and
+recommends the smallest action that would stop the intrusion. No model and no network call
+anywhere in the decision path: the pipeline runs in about 25 ms on the lab corpus and under
+a second on 45,000 real alerts.
 
-![The reconstructed incident: time on x, one lane per machine, root cause ringed](deck/causal-graph.png)
+## Try it in two minutes
+
+```bash
+git clone https://github.com/ShaanGS/Causeway.git && cd Causeway
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[server,dev]"
+```
+
+```bash
+causeway run                 # correlate the lab corpus, print the cases
+causeway run -v --top 1      # the headline case with every observation and edge
+causeway metrics             # the results table below, written to results/lab.json
+causeway serve               # the console at http://127.0.0.1:8788
+pytest                       # 51 tests, ~2 s
+```
+
+`make check` runs lint, types and tests. `make docker` builds and serves the console in a
+container. `causeway run your-alerts.jsonl` correlates your own data; the format is in
+[docs/API.md](docs/API.md).
+
+What `causeway run --top 1` prints:
+
+```
+inc-0001  115 alerts / 31 observations  edr, suricata, wazuh  2025-12-01 22:00:00 -> 2025-12-01 23:57:45
+  confidence 1.00   evidence: Single sensor
+  root #1  account j.okafor (via wazuh)             score 0.754
+  root #2  account r.silva (via wazuh)              score 0.561
+  root #3  account a.mensah (via wazuh)             score 0.549
+  recommend  Revoke the active session  [session.revoke]
+  withheld   This incident already spans 31 observations across 3 products, so force a
+             re-authentication would not end access the attacker already holds. Revoke the
+             active session is the smallest rung that does. Disable the account needs Analyst
+             approved; the evidence for account j.okafor (via wazuh) is Corroborated telemetry.
+```
 
 ## The result
 
@@ -47,6 +106,8 @@ is what queue tooling does by default, and the PS names it as a hazard.
 The one incident that matters holds **115 alerts, all nine stages, 31 observations across
 three products**, and its top-ranked root cause is correct.
 
+![The Measured tab: four configurations over identical input](docs/img/measured.png)
+
 ### On somebody else's data
 
 The same four configurations over the public **AIT Alert Data Set** (scenario
@@ -68,13 +129,28 @@ Two things this table says that flatter nobody. First, the negative control wins
 here: the attack is a quarter of the whole stream, so "the attack is rare" — the prior
 behind rarity weighting — is false on this corpus, and treating every entity as
 distinctive happens to work. Second, the first run of Causeway on this data scored a recall
-of 0.02. Reading why produced the change described under *Ubiquitous entities* below, which
-lifted it to 0.34 and seven stages without moving a single number on the lab corpus. It is
-still the weakest row on the page and it is reported as such.
+of 0.02. Reading why produced the change recorded in
+[ADR 0004](docs/adr/0004-ubiquity-is-degree-and-frequency.md), which lifted it to 0.34 and
+seven stages without moving a single number on the lab corpus. It is still the weakest row
+on the page and it is reported as such.
 
 ## How it works
 
-Six stages, no model and no network call in any of them.
+```mermaid
+flowchart LR
+    A[alerts from<br/>any product] --> N[normalise<br/>canonical slots]
+    N --> R[resolve<br/>aliases → one entity]
+    R --> D[suppress duplicates<br/>proven, never read<br/>held in a ledger]
+    D --> C[causal edges<br/>ancestry · pivot · shared entity · handoff<br/>nearest predecessor, rarity-weighted]
+    C --> I[incidents<br/>confidence ↑ with corroboration<br/>trust ↓ to weakest link]
+    I --> RC[root cause<br/>entities, not alerts]
+    RC --> RS[response<br/>lowest effective rung<br/>the evidence authorises]
+    I -.lineage · audit chain.-> G[(provenance<br/>engine)]
+    G -.authorisation.-> RS
+```
+
+Six stages, no model and no network call in any of them. The full data flow with module
+names is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 **Normalise.** Every product's alert is pulled into canonical entity slots. A sensor with no
 opinion about a slot omits it; correlation never joins on a missing value.
@@ -135,7 +211,7 @@ The interesting output is the refusal, not the recommendation:
 That tells an analyst what the system would need to go further. A control that only says no
 gets switched off.
 
-## Where the provenance engine comes in
+### Where the provenance engine comes in
 
 `ventriloquist/` is a provenance gateway built for an earlier project and vendored here
 unchanged apart from six additive origin kinds. It contributes three things this problem
@@ -171,19 +247,27 @@ together and still be barred from disruptive action — certainty that a story h
 is not certainty about who did it. Collapsing them into one score is how correlation tools
 end up either over-escalating or refusing to act at all.
 
-## What the problem statement asks for, and where it is answered
+## Every claim, and where to check it
 
-| PS requirement | where | how it is checked |
+| claim | code | proof |
 |---|---|---|
-| Correlate alerts across products into causal incidents | `causeway/correlate.py`, `incident.py` | all nine stages land in one incident; every edge points forward in time |
-| Fragmented entity context | `causeway/entities.py` | four spellings of one person resolve to one; a pid is scoped to its host |
-| Deduplicate without losing evidence | `causeway/dedup.py` | zero evidence erased on both corpora; the naive baseline is shown erasing it |
-| Root-cause identification | `causeway/rootcause.py` | top-1 names the compromised identity; an address is never the answer |
-| Minimal-impact, evidence-gated response | `causeway/response.py`, `policies/soc.yaml` | destructive rungs still need a human; annotation is never refused |
-| Explainability | every `Edge`, `RootCandidate` and `Option` carries a `reason` | a test fails on any edge that cannot explain itself |
-| Auditability | `ventriloquist/audit.py` | the hash chain verifies after a full ingest |
-| Measured, with baselines and controls | `causeway/metrics.py` | four configurations, byte-identical input, negative control must bite |
-| Documented data provenance and licensing | *Data*, below | — |
+| Alerts from different products are correlated into causal incidents | [correlate.py](causeway/correlate.py), [incident.py](causeway/incident.py) | [`test_the_whole_kill_chain_lands_in_one_incident`](tests/test_causeway.py#L164) |
+| Every edge points forward in time | [correlate.py:181-207](causeway/correlate.py#L181-L207) | [`test_every_edge_points_forward_in_time`](tests/test_causeway.py#L128) |
+| Fragmented entity context is resolved | [entities.py:87-110](causeway/entities.py#L87-L110) | [`test_four_spellings_of_one_person_resolve_to_one`](tests/test_causeway.py#L60), [`test_a_process_is_scoped_to_its_host`](tests/test_causeway.py#L67) |
+| Duplicates are proven, never read, and never dropped | [dedup.py:148-172](causeway/dedup.py#L148-L172), [`Ledger`](causeway/dedup.py#L119) | [`test_causal_dedup_erases_no_evidence`](tests/test_causeway.py#L89), [`test_suppressed_alerts_are_held_not_dropped`](tests/test_causeway.py#L106) |
+| The naive baseline really does bury the root cause | [`naive_text_group`](causeway/dedup.py#L182) | [`test_naive_text_dedup_erases_the_root_cause`](tests/test_causeway.py#L97) |
+| Hubs carry no signal, but loud is not ubiquitous | [`entity_weights`](causeway/correlate.py#L104) | [`test_ubiquitous_entities_carry_little_weight`](tests/test_causeway.py#L134), [`test_loud_is_not_the_same_as_ubiquitous`](tests/test_causeway.py#L140) |
+| Rarity weighting is load-bearing, not decoration | [metrics.py](causeway/metrics.py) | [`test_rarity_weighting_is_load_bearing`](tests/test_causeway.py#L265) |
+| The root cause is the compromised identity, never an address | [rootcause.py:41-50](causeway/rootcause.py#L41-L50) | [`test_root_cause_names_the_compromised_identity`](tests/test_causeway.py#L191), [`test_an_address_is_never_the_top_answer`](tests/test_causeway.py#L197) |
+| The response is the smallest rung that stops progression | [`recommend`](causeway/response.py#L164) | [`test_the_biggest_incident_gets_a_containing_action`](tests/test_causeway.py#L213) |
+| The most destructive rungs still need a human; annotation is never refused | [policies/soc.yaml](causeway/policies/soc.yaml) | [`test_the_most_destructive_rungs_still_need_a_human`](tests/test_causeway.py#L221), [`test_annotation_is_never_refused`](tests/test_causeway.py#L231) |
+| Authorisation is against the target's lineage, not the incident's | [`target_provenance`](causeway/response.py#L144) | [`test_confidence_rises_with_corroboration_but_trust_does_not`](tests/test_causeway.py#L170) |
+| No correlation rule reads the answer key | every rule module | [`test_no_correlation_rule_reads_the_answer_key`](tests/test_causeway.py#L179) (AST-checked) |
+| No model, no network call in the decision path | [ventriloquist/policy.py](ventriloquist/policy.py) | [`test_no_model_or_network_call_in_the_decision_path`](tests/test_causeway.py#L238) |
+| Every decision is on a tamper-evident audit chain | [ventriloquist/audit.py](ventriloquist/audit.py) | [`test_the_chain_verifies_after_a_full_ingest`](tests/test_causeway.py#L248) |
+| The results table reproduces | [metrics.py](causeway/metrics.py) | [`test_metrics_reproduce`](tests/test_causeway.py#L255), CI runs `causeway metrics` |
+| The public-dataset adapter reads the rows as shipped | [adapters/ait.py](causeway/adapters/ait.py) | [tests/test_adapters.py](tests/test_adapters.py), against the exact row shapes |
+| The CLI and the API show the same pipeline | [cli.py](causeway/cli.py), [server/app.py](server/app.py) | [tests/test_surfaces.py](tests/test_surfaces.py) |
 
 ## Data
 
@@ -204,9 +288,6 @@ measuring against it:
   the deployment service's read identically. Merging them erases the persistence stage, and
   the false-suppression metric exists to catch exactly that.
 
-No correlation rule may read the ground-truth label. A test parses the AST of every rule
-module and fails if any of them touches `.stage`.
-
 **`causeway/adapters/ait.py` — AIT Alert Data Set.** Landauer, Skopik and Wurzenberger,
 *Introducing a New Alert Data Set for Multi-Step Attack Analysis*, CSET '24.
 [Zenodo 10.5281/zenodo.8263181](https://zenodo.org/records/8263181), **CC BY 4.0**. 2.65 M
@@ -223,33 +304,10 @@ and `fast.log`) and are attributed to Suricata with the signature id as the rule
 relay is not credited with an observation it never made and the ledger can prove the pair
 are duplicates; every agent is named `wazuh-client`, so the host comes from the syslog
 header only; and addresses carry ports. The duplicate window has to be 5 s on this corpus —
-attack stages run as short as 2 s — and the number that says so is in `dedup.py`.
+attack stages run as short as 2 s — and [ADR 0005](docs/adr/0005-the-repeat-window-is-a-property-of-the-data.md)
+records why.
 
-## Run it
-
-```bash
-git clone https://github.com/ShaanGS/Causeway.git && cd Causeway
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[server,dev]"
-```
-
-```bash
-causeway run                       # correlate the lab corpus, print the cases
-causeway run -v --top 1            # ...with every observation and edge of the headline case
-causeway metrics                   # the table above -> results/lab.json
-causeway metrics ait --window 5    # the public corpus (needs data/raw/ait_ads.zip)
-causeway export --out alerts.jsonl # the lab corpus in the JSONL shape `run` accepts
-causeway run alerts.jsonl          # correlate your own alerts
-causeway serve                     # the analyst console at http://127.0.0.1:8788
-```
-
-`python -m causeway` is the same CLI; `python -m causeway.metrics` runs the harness alone.
-
-```bash
-pytest && ruff check . && mypy causeway server
-```
-
-## Repository layout
+## Repository
 
 ```
 causeway/            the product
@@ -268,16 +326,22 @@ causeway/            the product
 ventriloquist/       the vendored provenance engine (lineage, policy, audit chain)
 server/              FastAPI surface and the single-file console
 tests/               51 tests, including the negative controls
+docs/                ARCHITECTURE.md, API.md, adr/ (decision records), img/
 results/             what `causeway metrics` last wrote
 data/raw/labels.csv  AIT attack windows (the archive itself is downloaded, not committed)
 deck/                the submission deck and the script that draws its figure from the pipeline
+AGENTS.md            build, test and run instructions and the conventions tests enforce
 ```
+
+Also: [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md),
+[CHANGELOG.md](CHANGELOG.md), a `Makefile`, a `Dockerfile`, pre-commit hooks, Dependabot,
+and CI on Python 3.11 and 3.12 running ruff, mypy, pytest and the metrics harness.
 
 ## Tests
 
-51 tests, run in CI on Python 3.11 and 3.12 alongside `ruff` and `mypy`. The ones that
-matter are the controls — anything that groups will report compression, so the tests worth
-trusting are those that would fail if a mechanism were quietly doing nothing:
+51 tests. The ones that matter are the controls — anything that groups will report
+compression, so the tests worth trusting are those that would fail if a mechanism were
+quietly doing nothing:
 
 - rarity weighting is load-bearing: with it off, precision must more than halve **and**
   compression must improve, or the headline row was an accident;

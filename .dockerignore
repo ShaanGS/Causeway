@@ -1,0 +1,11 @@
+.venv
+.git
+data/raw
+deck
+tests
+docs
+results
+.pytest_cache
+.ruff_cache
+.mypy_cache
+*.pptx
