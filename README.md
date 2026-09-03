@@ -1,5 +1,7 @@
 # Causeway
 
+[![ci](https://github.com/ShaanGS/Causeway/actions/workflows/ci.yml/badge.svg)](https://github.com/ShaanGS/Causeway/actions/workflows/ci.yml)
+
 **Causal SOC alert correlation and root-cause intelligence.**
 
 A single attacker action produces dozens of technically correct alerts across products that
@@ -226,6 +228,7 @@ attack stages run as short as 2 s — and the number that says so is in `dedup.p
 ## Run it
 
 ```bash
+git clone https://github.com/ShaanGS/Causeway.git && cd Causeway
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[server,dev]"
 ```
