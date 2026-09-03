@@ -1,5 +1,5 @@
 # Runtime + console + tests. `pip install -e ".[server,dev]"` is equivalent.
-pyyaml>=6.0
+pyyaml>=6.0.3
 fastapi>=0.110
 uvicorn>=0.27
 pytest>=8.0
