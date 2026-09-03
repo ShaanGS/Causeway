@@ -29,14 +29,16 @@ dev = [
 causeway = "causeway.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["causeway*", "ventriloquist*"]
+include = ["causeway*", "ventriloquist*", "server*"]
 
 [tool.setuptools.package-data]
 causeway = ["policies/*.yaml"]
 ventriloquist = ["policies/*.yaml"]
+server = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "-q"
 
 [tool.ruff]
