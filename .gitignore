@@ -5,3 +5,7 @@ __pycache__/
 *.orig
 data/raw/
 .DS_Store
+deck/slide-*.jpg
+deck/*.pdf
+deck/unpacked/
+deck/recursion-thumbs*.jpg
