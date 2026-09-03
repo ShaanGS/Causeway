@@ -1,0 +1,82 @@
+# Ventriloquist default policy.
+#
+# Rules are DATA. Adding a constraint, tightening an action class, or allowlisting an
+# origin is an edit to this file -- never a code change.
+#
+# Trust lattice, lowest to highest:
+#   UNTRUSTED < THIRD_PARTY < TOOL_VERIFIED < USER < USER_VERIFIED < SYSTEM
+
+version: 1
+name: default
+description: Baseline provenance policy for agent memory.
+
+# Retrieval is refused unless the weakest origin in a memory's lineage meets the trust
+# floor for the action the retrieval is feeding. Reading is cheap; acting is not.
+action_classes:
+  - id: memory.read
+    label: Read into context
+    required_trust: UNTRUSTED
+    rule_id: R-001
+    description: >
+      Plain recall with no downstream action. Anything may be read; provenance travels
+      with it so that whatever the read feeds is still constrained.
+
+  - id: communication.send
+    label: Send a message on the user's behalf
+    required_trust: USER
+    rule_id: R-008
+    description: Outbound email, chat, or ticket comment.
+
+  - id: data.export
+    label: Export data outside the trust boundary
+    required_trust: USER
+    rule_id: R-011
+    description: Upload, share link, or transmit a document off-platform.
+
+  - id: financial.payment
+    label: Move money
+    required_trust: USER_VERIFIED
+    rule_id: R-014
+    description: >
+      Payment instructions must trace to an origin the principal verified out of band.
+      A remittance account learned from a web page can never authorise a transfer.
+
+  - id: credential.access
+    label: Read or use a secret
+    required_trust: USER_VERIFIED
+    rule_id: R-017
+    description: API keys, tokens, passwords, or any credential material.
+
+  - id: code.execute
+    label: Execute code or a shell command
+    required_trust: USER_VERIFIED
+    rule_id: R-021
+    description: Anything that runs.
+
+  - id: system.config
+    label: Change agent or platform configuration
+    required_trust: SYSTEM
+    rule_id: R-030
+    description: Tool registration, policy edits, memory-store settings.
+
+# Origins may be pinned above their default trust once verified out of band.
+# This is how a legitimate vendor account gets promoted -- deliberately manual.
+origin_overrides:
+  - ref: user:principal
+    trust: USER_VERIFIED
+    note: The account holder, authenticated in session.
+  - ref: system:operator
+    trust: SYSTEM
+    note: Platform configuration.
+
+# Origins declared compromised after the fact. A revocation may only ever LOWER trust,
+# and is applied after the overrides above so that a pinned origin can still be taken
+# back. This is retroactive at no cost: trust is recomputed from origins on every
+# evaluation, so listing a source here re-evaluates every memory that ever derived from
+# it -- including the ones the agent rewrote in its own words -- without editing a single
+# stored record. The console writes here when an operator revokes a source.
+revoked_origins: []
+
+# Quarantine rather than hard-drop. A blocked memory is preserved, reviewable, and
+# releasable by a human -- refusals must be recoverable or operators disable the control.
+on_deny: quarantine
