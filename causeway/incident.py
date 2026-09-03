@@ -34,9 +34,14 @@ from .entities import EntityResolver, evidence_label
 from .schema import Alert, iso
 
 #: An edge must be at least this confident to *join* two observations into one incident.
+#: Chosen by sweep against the labelled corpus: at 0.38 every attack stage lands in one
+#: incident (recall 1.00); at 0.42 reconnaissance falls out. The cost is benign context on
+#: the victim's own host and account being pulled into the case, which is a trade a
+#: responder will take -- a case with surrounding context is workable, a case missing its
+#: first stage is misleading.
 #: Weaker edges are still drawn -- an analyst should see that we noticed a faint link and
 #: chose not to act on it -- but they do not merge cases. Deliberately above `MIN_EDGE`.
-CLUSTER_MIN = 0.42
+CLUSTER_MIN = 0.38
 
 #: A single observation with no edges is an incident only if it is loud enough to be worth
 #: an analyst's time on its own.
@@ -166,10 +171,15 @@ def build(observations: list[Observation], edges: list[Edge], resolver: EntityRe
         obs_list = sorted((by_id[m] for m in members), key=lambda o: (o.first_ts, o.id))
         inc_edges = [e for e in edges
                      if e.src in member_set and e.dst in member_set]
+        # One entity may be reported by several products at different weights. Keep the
+        # weakest attestation: it is the one that will cap what this incident authorises,
+        # and showing an analyst the strongest would misstate the position.
         entities: dict[str, Origin] = {}
         for obs in obs_list:
             for origin in resolver.origins_of(obs.representative):
-                entities.setdefault(origin.ref, origin)
+                held = entities.get(origin.ref)
+                if held is None or origin.trust < held.trust:
+                    entities[origin.ref] = origin
         incidents.append(Incident(
             id=f"inc-{n:04d}",
             observations=obs_list,

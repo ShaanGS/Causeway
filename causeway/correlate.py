@@ -4,10 +4,13 @@ Ventriloquist is *handed* lineage by an agent's turn context. A SOC is handed no
 edges have to be inferred from what the alerts happen to mention. Three ideas do the work
 here, and each is a deliberate answer to a way that alert correlation usually fails.
 
-**Precedence is mandatory.** Every edge points forward in time. Co-occurrence is not
-causation, and a correlator that will draw an edge in either direction has only found a
-cluster. Turning this off is the negative control in `metrics.py` -- if the results barely
-move without it, the causal claim was decoration.
+**Precedence is mandatory.** Every edge points forward in time, so the graph an analyst
+reads is a DAG and "what did this lead to" has an answer. Being straight about its scope:
+because observations are walked in time order and linked to their nearest *predecessor*,
+precedence is structurally guaranteed rather than filtered for, and clustering is undirected
+regardless -- so disabling it does not move the numbers. It shapes the graph, not the
+grouping. The mechanism that does carry the grouping is the next one, and that is what the
+negative control in `metrics.py` targets.
 
 **Nearest predecessor, not every predecessor.** An entity links an observation to the most
 recent earlier observation that mentioned it, not to all of them. Linking to all produces a
@@ -50,8 +53,21 @@ LINK_STRENGTH: dict[OriginKind, float] = {
 
 PROC_WINDOW = 3600     # a parent process may sit idle a while before its child acts
 PIVOT_WINDOW = 1800    # same identity appearing on a second host
-ENTITY_WINDOW = 900    # ordinary shared-entity continuity
 MIN_EDGE = 0.30        # below this an edge is noise and is not drawn
+
+#: How long a shared entity still means something, per kind. A flat window is wrong in both
+#: directions: it either expires attacker infrastructure that persists for the whole
+#: campaign, or it keeps a process id alive long enough to collide with an unrelated one.
+#: An early flat 900s dropped the reconnaissance stage entirely -- the scan ran half an hour
+#: before the spray it set up, which is ordinary attacker patience and not a long gap.
+ENTITY_WINDOW: dict[OriginKind, int] = {
+    OriginKind.PROCESS: 900,     # pids are reused; do not reach far
+    OriginKind.HOST: 1800,
+    OriginKind.ACCOUNT: 3600,    # an identity is the through-line of a campaign
+    OriginKind.ADDRESS: 3600,    # so is the infrastructure it comes from
+    OriginKind.ARTIFACT: 3600,
+}
+DEFAULT_ENTITY_WINDOW = 900
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,20 +97,30 @@ def entity_weights(observations: list[Observation], resolver: EntityResolver
     return {ref: min(1.0, math.log(total / count) / scale) for ref, count in df.items()}
 
 
+def _all_refs(observations: list[Observation], resolver: EntityResolver) -> set[str]:
+    return {o.ref for obs in observations
+            for o in resolver.entity_origins(obs.representative)}
+
+
 def _refs(obs: Observation, resolver: EntityResolver) -> dict[str, OriginKind]:
     return {o.ref: o.kind for o in resolver.entity_origins(obs.representative)
             if o.kind is not OriginKind.SENSOR}
 
 
 def correlate(observations: list[Observation], resolver: EntityResolver, *,
-              temporal: bool = True, min_edge: float = MIN_EDGE) -> list[Edge]:
+              temporal: bool = True, weighted: bool = True,
+              min_edge: float = MIN_EDGE) -> list[Edge]:
     """Build the causal edge set over observations.
 
-    ``temporal=False`` drops the precedence requirement, which is the ablation the metrics
-    harness runs to show precedence is load-bearing rather than ornamental.
+    ``weighted=False`` treats every entity as equally distinctive, which is the negative
+    control: it is what this system would be without the rarity idea, and it is how
+    correlation tools end up merging an estate into one incident because everything touches
+    the domain controller. ``temporal=False`` relaxes precedence; see the module docstring
+    for why that one moves nothing.
     """
     ordered = sorted(observations, key=lambda o: (o.first_ts, o.id))
-    weights = entity_weights(ordered, resolver)
+    weights = (entity_weights(ordered, resolver) if weighted
+               else {ref: 1.0 for ref in _all_refs(ordered, resolver)})
     #: best edge per (src, dst, rule). Two entities may both link one pair -- a shared host
     #: and a shared account, say -- and the pair deserves its *strongest* grounds, not
     #: whichever the iteration happened to reach first. Keeping the first silently discards
@@ -150,7 +176,8 @@ def correlate(observations: list[Observation], resolver: EntityResolver, *,
                 continue
             if temporal and prior.first_ts > obs.first_ts:
                 continue
-            if abs(obs.first_ts - prior.first_ts) > ENTITY_WINDOW:
+            if abs(obs.first_ts - prior.first_ts) > ENTITY_WINDOW.get(
+                    kind, DEFAULT_ENTITY_WINDOW):
                 continue
             conf = LINK_STRENGTH.get(kind, 0.4) * weights.get(ref, 0.0)
             add(prior, obs, "C-03", conf,
@@ -163,7 +190,8 @@ def correlate(observations: list[Observation], resolver: EntityResolver, *,
             prior = last_ref.get(f"address:{src_ip}")
             if prior is not None and prior.representative.entity("dst_ip") == src_ip \
                     and (not temporal or prior.first_ts <= obs.first_ts) \
-                    and abs(obs.first_ts - prior.first_ts) <= ENTITY_WINDOW:
+                    and abs(obs.first_ts - prior.first_ts) <= ENTITY_WINDOW[
+                        OriginKind.ADDRESS]:
                 conf = 0.65 * weights.get(f"address:{src_ip}", 0.0)
                 add(prior, obs, "C-04", conf,
                     f"traffic reached {src_ip}, which then originated this activity")

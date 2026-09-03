@@ -1,0 +1,113 @@
+{
+  "corpus": {
+    "name": "causeway-lab",
+    "seed": 7,
+    "alerts": 938,
+    "attack_alerts": 114,
+    "stages": [
+      "collection",
+      "cred_access",
+      "discovery",
+      "exfil",
+      "initial_access",
+      "lateral_move",
+      "password_spray",
+      "persistence",
+      "recon"
+    ]
+  },
+  "ground_truth_root": "account:j.okafor",
+  "minutes_per_pivot_assumption": 3.0,
+  "configurations": [
+    {
+      "name": "No correlation",
+      "alerts": 938,
+      "cases": 938,
+      "observations": 848,
+      "compression_ratio": 1.0,
+      "incident_precision": 0.0,
+      "incident_recall": 0.0,
+      "suppressed": 0,
+      "evidence_erased": 0,
+      "false_suppression_rate": 0.0,
+      "root_cause_top1": false,
+      "root_cause_top3": false,
+      "stages_recovered": "0/9",
+      "mttc_seconds": null,
+      "analyst_minutes_saved_modelled": 0.0,
+      "elapsed_ms": 6.84,
+      "model_calls": 0,
+      "network_calls": 0,
+      "notes": [
+        "Every alert is its own row. The floor."
+      ]
+    },
+    {
+      "name": "Naive text dedup",
+      "alerts": 938,
+      "cases": 4,
+      "observations": 482,
+      "compression_ratio": 234.5,
+      "incident_precision": 0.1496,
+      "incident_recall": 1.0,
+      "suppressed": 456,
+      "evidence_erased": 4,
+      "false_suppression_rate": 0.0088,
+      "root_cause_top1": false,
+      "root_cause_top3": false,
+      "stages_recovered": "4/9",
+      "mttc_seconds": 85434,
+      "analyst_minutes_saved_modelled": 2802.0,
+      "elapsed_ms": 15.09,
+      "model_calls": 0,
+      "network_calls": 0,
+      "notes": [
+        "Merges on alert text; links on any shared entity, either direction."
+      ]
+    },
+    {
+      "name": "Causeway (rarity weighting off)",
+      "alerts": 938,
+      "cases": 2,
+      "observations": 848,
+      "compression_ratio": 469.0,
+      "incident_precision": 0.133,
+      "incident_recall": 1.0,
+      "suppressed": 90,
+      "evidence_erased": 0,
+      "false_suppression_rate": 0.0,
+      "root_cause_top1": false,
+      "root_cause_top3": false,
+      "stages_recovered": "9/9",
+      "mttc_seconds": 86095,
+      "analyst_minutes_saved_modelled": 2808.0,
+      "elapsed_ms": 31.59,
+      "model_calls": 0,
+      "network_calls": 0,
+      "notes": [
+        "Negative control: same code, every entity treated as equally distinctive."
+      ]
+    },
+    {
+      "name": "Causeway",
+      "alerts": 938,
+      "cases": 17,
+      "observations": 848,
+      "compression_ratio": 55.18,
+      "incident_precision": 0.755,
+      "incident_recall": 1.0,
+      "suppressed": 90,
+      "evidence_erased": 0,
+      "false_suppression_rate": 0.0,
+      "root_cause_top1": true,
+      "root_cause_top3": true,
+      "stages_recovered": "9/9",
+      "mttc_seconds": 7065,
+      "analyst_minutes_saved_modelled": 2763.0,
+      "elapsed_ms": 23.92,
+      "model_calls": 0,
+      "network_calls": 0,
+      "notes": []
+    }
+  ]
+}

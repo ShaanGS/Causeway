@@ -9,10 +9,17 @@ context is fragmented" stays true no matter how clever the graph is.
 **Weight.** An entity becomes an `Origin`, which is the engine's existing unit of lineage,
 so every alert derived from it inherits it and `blast_radius()` can later ask what stands on
 it. Trust here is *evidentiary weight*, not authority-to-act: how much this observation is
-worth as grounds for doing something disruptive. A host EDR agent watching its own process
-tree is worth more than a network sensor's opinion about an address it has never
-authenticated, and that difference is what stops an incident resting on an IP reputation hit
-from isolating a production server on its own.
+worth as grounds for doing something disruptive.
+
+Weight belongs to the **sensor that reported the entity**, not to the kind of entity it is.
+An early version keyed it on kind -- addresses were inherently weak -- which capped every
+incident that mentioned an IP at the lowest rung and made most of the response ladder
+unreachable. That was wrong on the merits as well as unhelpful: an address logged by a
+first-party agent on a managed endpoint is exactly as reliable as that agent. What is weak
+is an address a reputation *feed* asserted something about. So an entity carries the trust
+of whoever reported it, the same entity seen by two sensors carries both, and `min()` over
+the lineage does the rest -- which is how an incident resting partly on an unverified feed
+ends up unable to isolate a production server on its own.
 """
 
 from __future__ import annotations
@@ -119,36 +126,41 @@ class EntityResolver:
         out: list[Origin] = []
         host = alert.entity("host")
         canon_host = self.host(host) if host else None
+        # Every entity in this alert is worth what the product that reported it is worth.
+        weight = SENSOR_TRUST.get(alert.sensor, DEFAULT_SENSOR_TRUST)
+        src = alert.sensor
+
+        def make(kind: OriginKind, locator: str, label: str) -> Origin:
+            return Origin.of(kind, locator, trust=weight, label=f"{label} (via {src})")
 
         if canon_host:
-            out.append(Origin.of(OriginKind.HOST, canon_host, label=f"host {canon_host}"))
+            out.append(make(OriginKind.HOST, canon_host, f"host {canon_host}"))
         if (user := alert.entity("user")):
             canon = self.user(user)
-            out.append(Origin.of(OriginKind.ACCOUNT, canon, label=f"account {canon}"))
+            out.append(make(OriginKind.ACCOUNT, canon, f"account {canon}"))
         for slot in ("src_ip", "dst_ip"):
             if (ip := alert.entity(slot)):
                 canon = self.address(ip)
-                out.append(Origin.of(OriginKind.ADDRESS, canon, label=f"address {canon}"))
+                out.append(make(OriginKind.ADDRESS, canon, f"address {canon}"))
         # A process is identified by its pid where the sensor supplied one, and by its image
         # name otherwise. Both forms are scoped to the host: pid 7101 means nothing on its
         # own, and joining two machines on a coincidental pid is exactly the kind of false
         # correlation that makes an analyst stop trusting the tool.
         image = alert.entity("process")
         if canon_host and (pid := alert.entity("pid")):
-            out.append(Origin.of(OriginKind.PROCESS, f"{canon_host}/pid:{pid}",
-                                 label=f"process {image or pid} on {canon_host}"))
+            out.append(make(OriginKind.PROCESS, f"{canon_host}/pid:{pid}",
+                            f"process {image or pid} on {canon_host}"))
         elif canon_host and image:
-            out.append(Origin.of(OriginKind.PROCESS, f"{canon_host}/img:{image.lower()}",
-                                 label=f"process {image} on {canon_host}"))
+            out.append(make(OriginKind.PROCESS, f"{canon_host}/img:{image.lower()}",
+                            f"process {image} on {canon_host}"))
 
         # Files and hashes are entities in their own right. Leaving them out would let two
         # alerts about two different archived files look like one repeated alert, which is
         # the precise failure `dedup.py` exists to refuse.
         if (path := alert.entity("file")):
-            out.append(Origin.of(OriginKind.ARTIFACT, f"file:{path.lower()}",
-                                 label=f"file {path}"))
+            out.append(make(OriginKind.ARTIFACT, f"file:{path.lower()}", f"file {path}"))
         if (h := alert.entity("hash")):
-            out.append(Origin.of(OriginKind.ARTIFACT, f"hash:{h}", label=f"file hash {h[:12]}"))
+            out.append(make(OriginKind.ARTIFACT, f"hash:{h}", f"file hash {h[:12]}"))
         return out
 
     def origins_of(self, alert: Alert) -> list[Origin]:

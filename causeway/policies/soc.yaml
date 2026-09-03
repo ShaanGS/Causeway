@@ -1,0 +1,87 @@
+# Causeway response policy.
+#
+# Rules are DATA. Raising the bar for isolating a host is an edit to this file, not a code
+# change, and the console can make that edit live in front of a jury.
+#
+# The floor is the *weakest* link in an incident's evidence chain, never the strongest
+# signal in it. An incident can be near-certain that its alerts belong together and still
+# be barred from disruptive action, because certainty that a story hangs together is not
+# the same as certainty about who did it. That gap is where false isolation lives.
+#
+# Evidence levels, lowest to highest:
+#   UNTRUSTED     Unverified claim        someone else's assertion: reputation feed, hearsay
+#   THIRD_PARTY   Single sensor           one inferring sensor -- network IDS, anomaly model
+#   TOOL_VERIFIED Corroborated telemetry  first-party agents reporting what they observed
+#   USER          Analyst confirmed       a human looked at it
+#   USER_VERIFIED Analyst approved        a human authorised this specific action
+#   SYSTEM        Operator policy         standing configuration
+
+version: 1
+name: causeway-soc
+description: What an incident's evidence must be worth before each response is allowed.
+
+action_classes:
+  - id: alert.annotate
+    label: Annotate the incident
+    required_trust: UNTRUSTED
+    rule_id: S-001
+    description: >
+      Attach the correlation, the root-cause ranking and the reasoning to the case. Costs
+      nothing and destroys nothing, so anything at all may authorise it. This is the action
+      that must always remain available -- a system whose only options are "do nothing" and
+      "isolate the host" is the one analysts learn to ignore.
+
+  - id: analyst.notify
+    label: Raise it to an analyst
+    required_trust: UNTRUSTED
+    rule_id: S-004
+    description: Put the case in front of a human. Never gated -- escalation is not a risk.
+
+  - id: identity.mfa_challenge
+    label: Force a re-authentication
+    required_trust: THIRD_PARTY
+    rule_id: S-011
+    description: >
+      Challenge the identity at its next action. Recoverable in seconds by the legitimate
+      user and expensive for an attacker holding only a stolen session, which is why it
+      sits this low. The smallest thing that actually interferes with an intruder.
+
+  - id: session.revoke
+    label: Revoke the active session
+    required_trust: TOOL_VERIFIED
+    rule_id: S-014
+    description: >
+      Kill the session without disabling the account. Needs first-party telemetry, not one
+      sensor's inference: an address reputation hit is not grounds to sign someone out.
+
+  - id: credential.rotate
+    label: Force a credential rotation
+    required_trust: TOOL_VERIFIED
+    rule_id: S-018
+    description: Invalidate the credential. Disruptive but reversible, and durable.
+
+  - id: host.isolate
+    label: Isolate the host from the network
+    required_trust: USER
+    rule_id: S-025
+    description: >
+      Cut a machine off. Whatever that machine was doing for the business stops, and the PS
+      is explicit that automated systems isolating hosts without understanding impact is
+      part of the problem rather than the fix. A human decides.
+
+  - id: account.disable
+    label: Disable the account
+    required_trust: USER_VERIFIED
+    rule_id: S-031
+    description: >
+      Lock a person out of everything. The most durable containment available and the most
+      damaging if the correlation was wrong, so it requires a human who approved this
+      specific action -- not merely a human who has seen the case.
+
+# Overrides may only RAISE trust, never lower it. Revocations may only lower it, and are
+# applied last. A sensor that has earned more credit than its class default gets it here.
+origin_overrides: {}
+
+revoked_origins: []
+
+on_deny: quarantine
