@@ -1,16 +1,6 @@
 <h1 align="center">Causeway</h1>
 
-<p align="center"><strong>Causal SOC alert correlation and root-cause intelligence.</strong><br/>
-From 938 alerts to 17 cases, the right root cause, and the smallest action that would have stopped the intrusion — with the evidence for every step, and a written refusal for every step it will not take.</p>
-
-<p align="center">
-<a href="https://github.com/ShaanGS/Causeway/actions/workflows/ci.yml"><img alt="ci" src="https://github.com/ShaanGS/Causeway/actions/workflows/ci.yml/badge.svg"></a>
-<img alt="python" src="https://img.shields.io/badge/python-3.11%20%7C%203.12-3776ab">
-<img alt="tests" src="https://img.shields.io/badge/tests-51%20passing-3fb950">
-<img alt="lint" src="https://img.shields.io/badge/ruff%20%2B%20mypy-clean-3fb950">
-<img alt="decision path" src="https://img.shields.io/badge/model%20calls-0-8b949e">
-<a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-blue"></a>
-</p>
+<p align="center">Causal SOC alert correlation and root-cause intelligence.</p>
 
 <p align="center">
 <a href="#try-it-in-two-minutes">Try it</a> ·
@@ -22,6 +12,8 @@ From 938 alerts to 17 cases, the right root cause, and the smallest action that 
 <a href="docs/adr/">Decisions</a> ·
 <a href="#limits">Limits</a>
 </p>
+
+From 938 alerts to 17 cases, the right root cause, and the smallest action that would have stopped the intrusion — with the evidence for every step, and a written refusal for every step it will not take.
 
 Built for **PS2 — Causal SOC Alert Correlation & Root-Cause Intelligence**
 (Microsoft Innovation Club, VIT Chennai).
